@@ -1,8 +1,11 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from .config import Settings
 from sqlalchemy.ext.declarative import declarative_base
+import redis
 
 settings = Settings() # pyright: ignore[reportCallIssue]
+
+redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True, retry_on_timeout=True)
 
 database_url = settings.DATABASE_URL
 if database_url.startswith("posgresql+psycopg2://"):
