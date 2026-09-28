@@ -9,11 +9,13 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
     "fastapi[standard]>=0.141.1",
     "psycopg2>=2.9.13",
     "pwdlib[argon2]>=0.3.1",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.0",
     "python-dotenv>=1.2.3",
     "redis>=8.1.0",
     "sqlalchemy>=2.0.54",
@@ -22,6 +24,15 @@ dependencies = [
 
 [project.scripts]
 doneify = "doneify:main"
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "pytest>=9.0.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
 
 [build-system]
 requires = ["uv_build>=0.12.17,<0.13.0"]

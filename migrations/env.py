@@ -1,14 +1,25 @@
 from logging.config import fileConfig
+import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
-from ..app.core.database import Base
+from dotenv import load_dotenv
+import app.models.auth as auth_models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+load_dotenv()
+database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    raise RuntimeError("DATABASE_URL must be set to run Alembic migrations")
+database_url = database_url.replace(
+    "postgresql+asyncpg://", "postgresql+psycopg2://", 1
+)
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -19,7 +30,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata
+target_metadata = auth_models.Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
