@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from ..core.base import Base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from .task import Task
 
 class User(Base):
     __tablename__ = "users"
@@ -12,6 +13,7 @@ class User(Base):
     password = Column(String, nullable=False)
     is_verified = Column(Boolean, default=False, nullable=False)
     refresh_token = relationship("RefreshToken", back_populates="user")
+    tasks = relationship("Task", back_populates="user")
 
 class RefreshToken(Base):
     __tablename__ = "refresh_token"
