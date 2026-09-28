@@ -3,6 +3,7 @@ from ..core.base import Base
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .task import Task
+from .event import Event
 
 class User(Base):
     __tablename__ = "users"
@@ -14,6 +15,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     refresh_token = relationship("RefreshToken", back_populates="user")
     tasks = relationship("Task", back_populates="user")
+    events = relationship("Event", back_populates="user", cascade="all, delete-orphan")
 
 class RefreshToken(Base):
     __tablename__ = "refresh_token"

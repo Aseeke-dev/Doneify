@@ -21,10 +21,13 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 )
 async def create_task(
 	task: TaskCreate,
+	response: Response,
 	db: AsyncSession = Depends(get_db),
 	current_user: User = Depends(get_current_user),
 ) -> TaskResponse:
-	return await TaskService(db).create_task(cast(int, current_user.id), task)
+	created_task = await TaskService(db).create_task(cast(int, current_user.id), task)
+	response.headers["Location"] = f"/api/v1/tasks/{created_task.id}"
+	return created_task
 
 
 @router.get("", response_model=list[TaskResponse])
@@ -52,7 +55,7 @@ async def get_task(
 	return task
 
 
-@router.put(
+@router.patch(
 	"/{task_id}",
 	response_model=TaskResponse,
 	dependencies=[Depends(require_csrf_token)],

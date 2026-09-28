@@ -64,5 +64,7 @@ def test_authenticate_user_rejects_invalid_or_unverified_user(
     with pytest.raises(HTTPException) as error:
         asyncio.run(service.authenticate_user("user@example.com", password))
 
-    assert error.value.status_code == 400
+    assert error.value.status_code == (
+        401 if expected_detail == "Invalid credentials" else 403
+    )
     assert error.value.detail == expected_detail

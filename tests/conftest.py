@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, Generator
+import asyncio
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.api.dependencies import EmailService
 from app.core.base import Base
 from app.core.database import get_db
+import app.main as main_module
 from app.main import app
 from app.services import auth as auth_service_module
 
@@ -73,10 +75,7 @@ def sent_emails(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
 
 
 @pytest.fixture
-def client(
-    fake_redis: FakeRedis,
-    sent_emails: list[tuple[str, str]],
-) -> Generator[TestClient, None, None]:
+def db_session_factory() -> Generator[async_sessionmaker[AsyncSession], None, None]:
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -96,15 +95,27 @@ def client(
             await connection.run_sync(Base.metadata.drop_all)
         await engine.dispose()
 
+    asyncio.run(create_tables())
+    yield session_factory
+    asyncio.run(drop_tables())
+
+
+@pytest.fixture
+def client(
+    fake_redis: FakeRedis,
+    sent_emails: list[tuple[str, str]],
+    db_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[TestClient, None, None]:
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        async with session_factory() as session:
+        async with db_session_factory() as session:
             yield session
 
-    import asyncio
+    async def no_op_reminder_worker() -> None:
+        return None
 
-    asyncio.run(create_tables())
+    monkeypatch.setattr(main_module, "event_reminder_worker", no_op_reminder_worker)
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-    asyncio.run(drop_tables())

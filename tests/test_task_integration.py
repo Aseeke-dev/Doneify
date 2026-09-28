@@ -14,7 +14,7 @@ def test_authenticated_user_can_create_read_update_and_delete_task(
         "/api/v1/auth/register",
         json={"username": "Task Owner", "email": email, "password": password},
     )
-    assert register_response.status_code == 200
+    assert register_response.status_code == 202
 
     verification_response = client.post(
         "/api/v1/auth/verify-account",
@@ -37,6 +37,7 @@ def test_authenticated_user_can_create_read_update_and_delete_task(
     assert create_response.status_code == 201
     created_task = create_response.json()
     task_id = created_task["id"]
+    assert create_response.headers["location"] == f"/api/v1/tasks/{task_id}"
     assert created_task["title"] == "First task"
     assert created_task["completed"] is False
 
@@ -48,17 +49,23 @@ def test_authenticated_user_can_create_read_update_and_delete_task(
     assert get_response.status_code == 200
     assert get_response.json()["title"] == "First task"
 
-    update_response = client.put(
+    empty_update_response = client.patch(
+        f"/api/v1/tasks/{task_id}", headers=csrf_headers, json={}
+    )
+    assert empty_update_response.status_code == 422
+
+    update_response = client.patch(
         f"/api/v1/tasks/{task_id}",
         headers=csrf_headers,
         json={
             "title": "Updated task",
-            "description": "Updated details",
+            "description": None,
             "completed": True,
         },
     )
     assert update_response.status_code == 200
     assert update_response.json()["title"] == "Updated task"
+    assert update_response.json()["description"] is None
     assert update_response.json()["completed"] is True
 
     delete_response = client.delete(

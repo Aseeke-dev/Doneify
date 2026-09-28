@@ -61,12 +61,13 @@ class AuthService:
 
         if existing_user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="Email already exists. Kindly sign in"
             )
 
-        data.password = hash_password(data.password)
-        new_user = User(**data.model_dump())
+        user_data = data.model_dump()
+        user_data["password"] = hash_password(data.password)
+        new_user = User(**user_data)
         await self.authrepo.create_user(new_user)
 
         otp = generate_4_digit_code()
@@ -75,7 +76,7 @@ class AuthService:
 
         await self.mail.send_otp(data.email, otp, background_task)
 
-        return {"Message": "Login Successful. check your mail for verification code"}
+        return {"message": "Verification email sent"}
 
     async def verify_user(self, data: VerifyAccountSubmit):
         redis_key = f"otp:{data.email}"
@@ -107,17 +108,17 @@ class AuthService:
 
         redis_client.delete(redis_key, attempts_key)
         await self.authrepo.verify_user(data.email)
-        return {"Message":"Email verified successfully. Kindly login to your account"}
+        return {"message": "Email verified successfully"}
 
     async def resend_verification_code(
         self, email: str, background_task: BackgroundTasks
     ):
         user = await self.authrepo.get_user_by_email(email)
         if user is None:
-            return {"Message": "If the account can be verified, a new code has been sent."}
+            return {"message": "If the account can be verified, a new code has been sent."}
 
         if getattr(user, "is_verified", False) is True:
-            return {"Message": "If the account can be verified, a new code has been sent."}
+            return {"message": "If the account can be verified, a new code has been sent."}
 
         cooldown_key = f"otp_resend_cooldown:{email}"
         if not redis_client.set(
@@ -143,26 +144,26 @@ class AuthService:
         redis_client.setex(f"otp:{email}", OTP_TTL_SECONDS, otp)
         redis_client.delete(f"otp_attempts:{email}")
         await self.mail.send_otp(email, otp, background_task)
-        return {"Message": "If the account can be verified, a new code has been sent."}
+        return {"message": "If the account can be verified, a new code has been sent."}
 
     async def authenticate_user(self, email: str, password: str):
         user = await self.authrepo.get_user_by_email(email)
 
         if not user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
 
         if not verify_password(password, user.password):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
             )
 
         if user.is_verified is False:  # pyright: ignore[reportAttributeAccessIssue]
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_403_FORBIDDEN,
                 detail="Email not verified. Kindly verify your email"
             )
 
@@ -196,7 +197,7 @@ class AuthService:
             csrf,
             30 * 60
         )
-        return {"Message": "Login successful", "csrf_token": csrf}
+        return {"message": "Login successful", "csrf_token": csrf}
 
     async def google_callback(self, response: Response, code: str):
         token_url = "https://oauth2.googleapis.com/token"
@@ -266,7 +267,7 @@ class AuthService:
             csrf,
             30 * 60
         )
-        return {"Message": "Login successful", "csrf_token": csrf}
+        return {"message": "Login successful", "csrf_token": csrf}
 
     async def logout(self, response: Response, request: Request):
         refresh_token = request.cookies.get("refresh_token")
@@ -277,7 +278,7 @@ class AuthService:
         self._clear_cookie(response, "refresh_token")
         self._clear_cookie(response, "csrf_token")
 
-        return {"Message": "Logout successful"}
+        return {"message": "Logout successful"}
 
     async def refresh_access_token(self, response: Response, request: Request):
         refresh_token = request.cookies.get("refresh_token")
@@ -326,23 +327,24 @@ class AuthService:
             30 * 60
         )
 
-        return {"Message": "Access token refreshed", "csrf_token": new_csrf_token}
+        return {"message": "Access token refreshed", "csrf_token": new_csrf_token}
 
     async def forgot_password(self, email: str, background_task: BackgroundTasks):
         user = await self.authrepo.get_user_by_email(email)
 
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+            return {
+                "message": "If an account exists, password reset instructions have been sent."
+            }
 
         reset_token = create_reset_token(user.email) # pyright: ignore[reportArgumentType]
         redis_client.setex(f"reset_token:{user.email}", 300, reset_token)
 
         await self.mail.send_reset_token(email, reset_token, background_task)
 
-        return {"Message": "Password reset token sent to your email"}
+        return {
+            "message": "If an account exists, password reset instructions have been sent."
+        }
 
     async def reset_password(self, email: str, reset_token: str, new_password: str):
         redis_key = f"reset_token:{email}"
@@ -365,7 +367,7 @@ class AuthService:
         await self.authrepo.reset_user_password(email, hash_password(new_password))
         redis_client.delete(redis_key)
 
-        return {"Message": "Password reset successful. You can now log in with your new password."}
+        return {"message": "Password reset successful"}
 
     async def get_profile(self, email: str):
         user = await self.authrepo.get_user_by_email(email)

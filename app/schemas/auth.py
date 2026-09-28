@@ -19,6 +19,11 @@ class VerifyAccountSubmit(BaseModel):
 class ResendVerificationSubmit(BaseModel):
     email: EmailStr
 
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
 class PasswordResetSubmit(BaseModel):
     email: EmailStr
     reset_token: str

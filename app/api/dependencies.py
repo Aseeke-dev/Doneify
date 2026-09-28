@@ -1,4 +1,7 @@
+import asyncio
+import html
 import smtplib
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +20,13 @@ import redis
 
 settings = Settings()  # pyright: ignore[reportCallIssue]
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True, retry_on_timeout=True)
+redis_client = redis.Redis(
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    db=0,
+    decode_responses=True,
+    retry_on_timeout=True,
+)
 
 
 def require_csrf_token(
@@ -39,7 +48,7 @@ class EmailService:
     def __init__(self) -> None:
         pass
 
-    def _execute_smtp_send(self, email: str, subject: str, html_content: str) -> None:
+    def _send_smtp_email(self, email: str, subject: str, html_content: str) -> None:
         msg = MIMEMultipart()
         msg["From"] = settings.MAIL_USERNAME
         msg["To"] = email
@@ -47,16 +56,35 @@ class EmailService:
 
         msg.attach(MIMEText(html_content, "html"))
 
-        try:
-            smtp_host = getattr(settings, "MAIL_SERVER", "smtp.gmail.com")
-            smtp_port = getattr(settings, "MAIL_PORT", 587)
+        smtp_host = getattr(settings, "MAIL_SERVER", "smtp.gmail.com")
+        smtp_port = getattr(settings, "MAIL_PORT", 587)
 
-            with smtplib.SMTP(host=smtp_host, port=smtp_port) as server:
-                server.starttls()
-                server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-                server.send_message(msg)
+        with smtplib.SMTP(host=smtp_host, port=smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
+            server.send_message(msg)
+
+    def _execute_smtp_send(self, email: str, subject: str, html_content: str) -> None:
+        try:
+            self._send_smtp_email(email, subject, html_content)
         except Exception as e:
             print(f"SMTP Email Send Error: {e}")
+
+    async def send_event_reminder(
+        self, email: str, event_title: str, starts_at: datetime
+    ) -> None:
+        safe_title = html.escape(event_title)
+        event_time = starts_at.astimezone(timezone.utc).strftime(
+            "%A, %B %d, %Y at %H:%M UTC"
+        )
+        await asyncio.to_thread(
+            self._send_smtp_email,
+            email,
+            f"Reminder: {event_title}",
+            f"<html><body><h2>Upcoming event</h2>"
+            f"<p><strong>{safe_title}</strong> is scheduled for {event_time}.</p>"
+            "</body></html>",
+        )
 
     async def send_otp(
         self, email: str, code: str, background_tasks: BackgroundTasks

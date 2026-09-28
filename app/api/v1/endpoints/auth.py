@@ -5,7 +5,14 @@ from fastapi import APIRouter, Depends, BackgroundTasks, Response, Request, HTTP
 from fastapi.responses import RedirectResponse
 from ....repositories.auth import AuthRepository
 from ....services.auth import AuthService
-from ....schemas.auth import PasswordResetSubmit, ResendVerificationSubmit, UserCreate, UserResponse, VerifyAccountSubmit
+from ....schemas.auth import (
+    PasswordResetRequest,
+    PasswordResetSubmit,
+    ResendVerificationSubmit,
+    UserCreate,
+    UserResponse,
+    VerifyAccountSubmit,
+)
 from ....core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from ...dependencies import get_current_user, redis_client, require_csrf_token
@@ -18,7 +25,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 settings = Settings()  # pyright: ignore[reportCallIssue]
 
-@router.post("/register")
+@router.post("/register", status_code=status.HTTP_202_ACCEPTED)
 async def register_user(
     user_create: UserCreate,
     background_tasks: BackgroundTasks,
@@ -130,22 +137,30 @@ async def refresh_token(
     auth_service = AuthService(db)
     return await auth_service.refresh_access_token(response, request)
 
-@router.post("/forget_password")
+@router.post(
+    "/password-reset-requests", status_code=status.HTTP_202_ACCEPTED
+)
 async def forget_password(
-    email: str,
+    reset_request: PasswordResetRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     auth_service = AuthService(db)
-    return await auth_service.forgot_password(email, background_tasks)
+    return await auth_service.forgot_password(
+        str(reset_request.email), background_tasks
+    )
 
-@router.post("/reset_password")
+@router.post(
+    "/password-reset-confirmations",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+)
 async def reset_password(
     reset_request: PasswordResetSubmit,
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     auth_service = AuthService(db)
-    return await auth_service.reset_password(
+    await auth_service.reset_password(
         reset_request.email,
         reset_request.reset_token,
         reset_request.new_password,
